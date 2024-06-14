@@ -8,25 +8,32 @@ import { useContext, useEffect, useState } from "react";
 import myContext from "../components/context/MyContext";
 import axios from "axios";
 import { FaRegClock } from 'react-icons/fa'; // Import the timer icon from Font Awesome
+import Timer from "./Categories/Timer";
 
 const OrdersPage = () => {
   const [orderData, setOrderData] = useState([]);
+  const [timers, setTimers] = useState({})
   const context = useContext(myContext);
 
   const { products } = context;
   const signInData = localStorage.getItem("user");
   const parsedSignInData = JSON.parse(signInData);
-  console.log("parsedSignInData", parsedSignInData)
 
 
   useEffect(() => {
+    const postData = { user_id: parsedSignInData.userId };
     const fetchData = () => {
-      const postData = { user_id: parsedSignInData.userId };
-
       axios
         .post("https://minitgo.com/api/user_orders.php", postData)
         .then((response) => {
           if (Array.isArray(response.data.data)) {
+            const newTimers = {};
+            response.data.data.forEach((order) => {
+              if (order.product_status.toLowerCase() === 'delivered') {
+                newTimers[order.order_id] = { seconds: 3 * 60 * 60, isActive: true };
+              }
+            });
+            setTimers(newTimers);
             setOrderData(response.data.data);
           } else {
             console.error("Expected an array but got:", response.data.data);
@@ -45,17 +52,32 @@ const OrdersPage = () => {
   }, [parsedSignInData.userId]);
 
 
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const newTimers = { ...timers };
+      Object.keys(newTimers).forEach((orderId) => {
+        const timer = newTimers[orderId];
+        if (timer.isActive && timer.seconds > 0) {
+          newTimers[orderId] = { ...timer, seconds: timer.seconds - 1 };
+        }
+      });
+      setTimers(newTimers);
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [timers]);
 
   const getStatusProgress = (status) => {
+
     switch (status.toLowerCase()) {
       case 'waiting':
         return { width: '99%', message: 'Waiting for order confirmation', animate: true };
       case 'rejected':
-        return { width: '0%', message: 'Rejected', animate: false };
+        return { width: '0%', message: 'Rejected', animate: false};
       case 'out for delivery':
         return { width: '65%', message: 'Out for delivery', animate: false };
       case 'finding delivery boy':
-        return { width: '35%', message: 'Finding delivery boy', animate: false };
+        return { width: '35%', message: 'Finding delivery boy', animate: false};
       case 'delivered':
         return { width: '100%', message: 'Delivered', animate: false };
       case 'accepted':
@@ -65,34 +87,9 @@ const OrdersPage = () => {
     }
   };
 
-  const initialSeconds = localStorage.getItem('timerSeconds') ? parseInt(localStorage.getItem('timerSeconds')) : 5;
-  const [seconds, setSeconds] = useState(initialSeconds);
-  const [isActive, setIsActive] = useState(true);
 
-  useEffect(() => {
-    let interval;
-    if (isActive && seconds > 0) {
-      interval = setInterval(() => {
-        setSeconds(prevSeconds => prevSeconds - 1);
-      }, 1000);
-    } else if (!isActive && seconds !== 0) {
-      clearInterval(interval);
-    }
-    return () => clearInterval(interval);
-  }, [isActive, seconds]);
 
-  useEffect(() => {
-    // Store the seconds in localStorage
-    localStorage.setItem('timerSeconds', seconds.toString());
-  }, [seconds]);
 
-  // Calculate hours, minutes, and seconds
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  const remainingSeconds = seconds % 60;
-
-  // Format the timer display
-  const formattedTime = `${hours < 10 ? '0' : ''}${hours}:${minutes < 10 ? '0' : ''}${minutes}:${remainingSeconds < 10 ? '0' : ''}${remainingSeconds}`;
 
   return (
     <div className="border ">
@@ -259,15 +256,20 @@ const OrdersPage = () => {
                                             <p className="text-muted mb-0">Order ID : {order.order_id}</p>
                                           </div>
 
-                                          {order.product_status.toLowerCase() === 'delivered' &&
-                                            <div className="timer d-flex justify-content-end flex-wrap">
 
-                                              <p className="fs-5"><FaRegClock style={{ marginRight: '10px' }} />{formattedTime}</p>
-
-                                            </div>
-                                          }
                                         </div>
-
+                                        <div className="row">
+                                      
+                                          {order.product_status.toLowerCase() === 'delivered' ? (
+                                           <div className="timer d-flex justify-content-end flex-wrap flex-column flex-end justify-items-end" style={{ marginRight: '50px' }}>
+                                           <p className="fs-5">
+                                             <FaRegClock style={{ marginRight: '10px' }} />
+                                             <Timer initialSeconds={3 * 60 * 60} orderId={order.order_id} />
+                                           </p>
+                                           <span className="fs-6">Order can not be returned after the timer ends.</span>
+                                         </div>
+                                          ) : null}
+                                        </div>
                                         <div className="d-flex flex-wrap align-items-center py-3">
                                           {order.product_status.toLowerCase() === 'delivered' ? (
                                             <Link to="/" className="btn btn-disabled mx-1 disabled" role="button" aria-disabled="">
@@ -282,7 +284,10 @@ const OrdersPage = () => {
                                           <Link to="/" className="btn btn-light border rounded-pill mx-1" role="button" aria-disabled="">
                                             Feedback
                                           </Link>
-                                          {formattedTime === "00:00:00" ? (
+                                          <Link to="/" className="btn btn-light border rounded-pill mx-1 disabled" role="button" aria-disabled="">
+                                              Return
+                                            </Link>
+                                          {/* {formattedTime === "00:00:00" ? (
                                             <Link to="/" className="btn btn-light border rounded-pill mx-1 disabled" role="button" aria-disabled="">
                                               Return
                                             </Link>
@@ -290,7 +295,7 @@ const OrdersPage = () => {
                                             Return
                                           </Link>
 
-                                          }
+                                          } */}
                                           <Link to="/" className="btn btn-light border rounded-pill mx-1" role="button" aria-disabled="">
                                             Review
                                           </Link>
@@ -304,6 +309,7 @@ const OrdersPage = () => {
                                       </div>
                                     </div>
                                   </div>
+
                                 </div>
                               </div>
                             </>
